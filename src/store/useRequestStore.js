@@ -37,6 +37,10 @@ export const useRequestStore = create((set) => ({
                     .from('crash_images')
                     .getPublicUrl(filePath)
                 imageUrlToSave = publicUrlData.publicUrl
+            } else {
+                console.error("Storage upload failed:", uploadError.message);
+                // If storage fails, we don't want to pass a File object to the DB insert
+                imageUrlToSave = null;
             }
         }
 

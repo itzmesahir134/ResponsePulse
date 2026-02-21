@@ -17,31 +17,35 @@ async function fileToGenerativePart(file) {
 export const verifyCrashImage = async (imageFile) => {
     try {
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash",
+            model: "gemini-flash-latest",
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        const prompt = `Analyze this image for a road accident/car crash. 
-Return: 
+        // Forced strict JSON prompt
+        const prompt = `Analyze this image for a road accident or car crash. 
+Your response MUST be a valid JSON object with these EXACT keys:
 { 
   "crash_detected": boolean, 
   "severity": "low" | "medium" | "high",
-  "reason": "short explanation"
-}`;
+  "reason": "a very short explanation for the driver"
+}
+If the image is not related to a vehicle accident or is unclear, set crash_detected to false.`;
 
         const imagePart = await fileToGenerativePart(imageFile);
         const result = await model.generateContent([prompt, imagePart]);
         const responseText = result.response.text();
 
-        return JSON.parse(responseText);
+        // Strip markdown if AI ignored the mimeType hint
+        const cleanedJson = responseText.replace(/```json|```/g, "").trim();
+        return JSON.parse(cleanedJson);
 
     } catch (e) {
         console.error("Gemini AI Verification Error:", e);
-        // Safety Fallback: Don't block the emergency, but mark as unverified
+        // Safety Fallback: Don't block the rescue, but mark as unverified
         return {
-            crash_detected: true,
+            crash_detected: true, // Optimistic for safety
             severity: "medium",
-            reason: "AI Verification Bypass (Technical Error)",
+            reason: "AI Verification Bypass (Network/API Error)",
             is_fallback: true
         };
     }
@@ -49,7 +53,7 @@ Return:
 
 export const generateFirstAid = async (incidentType, severity = 'unknown') => {
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
         const prompt = `You are a certified emergency assistant. 
 Provide structured first aid steps for a ${incidentType} emergency with ${severity} severity injuries.

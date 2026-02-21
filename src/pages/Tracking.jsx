@@ -89,7 +89,9 @@ export default function Tracking() {
                 .select('latitude, longitude')
                 .eq('id', driverId)
                 .single()
-            if (data?.latitude) setDriverLocation({ lat: data.latitude, lng: data.longitude })
+            if (data && data.latitude !== null && data.longitude !== null) {
+                setDriverLocation({ lat: Number(data.latitude), lng: Number(data.longitude) })
+            }
         }
 
         fetchRequest()
@@ -122,8 +124,8 @@ export default function Tracking() {
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${request.driver_id}` },
                 (payload) => {
-                    if (payload.new.latitude && payload.new.longitude) {
-                        setDriverLocation({ lat: payload.new.latitude, lng: payload.new.longitude })
+                    if (payload.new && payload.new.latitude !== null && payload.new.longitude !== null) {
+                        setDriverLocation({ lat: Number(payload.new.latitude), lng: Number(payload.new.longitude) })
                     }
                 }
             )
@@ -139,7 +141,7 @@ export default function Tracking() {
                 lat: request.latitude,
                 lng: request.longitude,
                 title: 'Emergency Site',
-                icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+                icon: "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
             }
         ]
 
@@ -152,7 +154,7 @@ export default function Tracking() {
                 lat: p.lat,
                 lng: p.lng,
                 title: p.name,
-                icon: p.type === 'hospital' ? "http://maps.google.com/mapfiles/ms/icons/hospitals.png" : "http://maps.google.com/mapfiles/ms/icons/police.png"
+                icon: p.type === 'hospital' ? "https://maps.google.com/mapfiles/ms/icons/hospitals.png" : "https://maps.google.com/mapfiles/ms/icons/police.png"
             })
         })
 
@@ -162,6 +164,16 @@ export default function Tracking() {
     const driverLocations = useMemo(() => {
         return driverLocation ? [driverLocation] : []
     }, [driverLocation])
+
+    const memoizedCenter = useMemo(() => {
+        if (!request) return { lat: 0, lng: 0 };
+        return { lat: Number(request.latitude), lng: Number(request.longitude) };
+    }, [request?.latitude, request?.longitude]);
+
+    const memoizedRouteEnd = useMemo(() => {
+        if (!request || !request.driver_id) return null;
+        return { lat: Number(request.latitude), lng: Number(request.longitude) };
+    }, [request?.driver_id, request?.latitude, request?.longitude]);
 
     if (!requestId) {
         return (
@@ -203,7 +215,7 @@ export default function Tracking() {
                         </div>
                         <h1 className="text-4xl font-black text-white tracking-tighter mb-2 leading-tight">
                             {request?.status === 'pending' && !request?.driver_id ? 'Searching for Responders' :
-                                (request?.status === 'pending' && request?.driver_id) ? 'Medical Unit Assigned' :
+                                (request?.status === 'assigned' || (request?.status === 'pending' && request?.driver_id)) ? 'Medical Unit Assigned' :
                                     request?.status === 'accepted' ? 'Ambulance En Route' : 'Mission Completed'}
                         </h1>
                         <div className="flex flex-col gap-4 mt-4">
@@ -386,13 +398,13 @@ export default function Tracking() {
             </div>
 
             {/* Right Map Side */}
-            <div className="flex-1 relative h-[400px] lg:h-full bg-slate-950 overflow-hidden">
+            <div className="flex-1 relative h-[400px] lg:h-[calc(100vh-64px)] bg-slate-950 overflow-hidden">
                 <AppMap
-                    center={{ lat: request.latitude, lng: request.longitude }}
+                    center={memoizedCenter}
                     markers={mapMarkers}
                     driverLocations={driverLocations}
                     routeStart={driverLocation}
-                    routeEnd={request.driver_id ? { lat: request.latitude, lng: request.longitude } : null}
+                    routeEnd={memoizedRouteEnd}
                     onRouteUpdate={setRouteDetails}
                     showHeatmap={false}
                     showRedZones={false}
@@ -416,46 +428,52 @@ export default function Tracking() {
                     </button>
                 </div>
 
-                {!request.driver_id && (
-                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-12 text-center bg-[#0B1220]/60 backdrop-blur-sm">
+                {!request.driver_id ? (
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-12 text-center bg-slate-950/40 backdrop-blur-[2px]">
                         {/* Radar/Scanning Animation */}
                         <div className="relative mb-12">
-                            <div className="absolute inset-0 rounded-full bg-red-600/20 animate-ping" style={{ animationDuration: '3s' }}></div>
-                            <div className="absolute inset-0 rounded-full bg-red-600/10 animate-ping" style={{ animationDuration: '2s' }}></div>
-                            <div className="w-24 h-24 rounded-full border-2 border-red-600/30 flex items-center justify-center relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(239,68,68,0.1)]">
-                                <Activity className="text-red-600 w-10 h-10 animate-pulse" />
+                            <div className="absolute inset-0 rounded-full bg-red-600/30 animate-ping" style={{ animationDuration: '6s' }}></div>
+                            <div className="absolute inset-0 rounded-full bg-red-600/20 animate-ping" style={{ animationDuration: '4s' }}></div>
+                            <div className="w-24 h-24 rounded-full border-2 border-red-600/40 flex items-center justify-center relative z-10 bg-slate-950/80 shadow-[0_0_50px_rgba(239,68,68,0.2)]">
+                                <Activity className="text-red-500 w-10 h-10 animate-pulse" />
                             </div>
                         </div>
 
-                        <h2 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">Scanning Grid</h2>
-                        <div className="flex flex-col gap-2 max-w-sm">
-                            <p className="text-slate-200 font-bold text-sm drop-shadow-lg">Locating nearest mobile responder unit...</p>
-                            <div className="mt-4 flex items-center justify-center gap-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce"></div>
-                                <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce [animation-delay:-0.15s]"></div>
-                                <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="space-y-6 flex flex-col items-center">
+                            <div className="space-y-2">
+                                <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Scanning Grid</h2>
+                                <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Establishing Dispatch Link...</p>
+                            </div>
+
+                            <div className="flex flex-col gap-2 max-w-xs">
+                                <p className="text-slate-200 font-bold text-sm drop-shadow-lg">Locating nearest mobile responder unit...</p>
+                                <div className="mt-2 flex items-center justify-center gap-3">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce"></div>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce [animation-delay:-0.15s]"></div>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-bounce [animation-delay:-0.3s]"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                ) || (
-                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-sm">
-                            <div className="bg-slate-950/95 backdrop-blur-2xl border border-slate-800/50 rounded-2xl shadow-2xl p-4 flex items-center justify-between border-b-4 border-b-emerald-500/50">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                                        <Navigation size={22} className="animate-pulse" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-0.5">Ambulance En Route</p>
-                                        <p className="text-white font-black text-sm uppercase">Medical Responder</p>
-                                    </div>
+                ) : (
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-sm">
+                        <div className="bg-slate-950/95 backdrop-blur-2xl border border-slate-800/50 rounded-2xl shadow-2xl p-4 flex items-center justify-between border-b-4 border-b-emerald-500/50">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
+                                    <Navigation size={22} className="animate-pulse" />
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-xl font-black text-emerald-500 leading-none mb-1">{routeDetails ? routeDetails.duration : 'Calculating...'}</p>
-                                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">{routeDetails ? routeDetails.distance : '...'}</p>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-0.5">Ambulance En Route</p>
+                                    <p className="text-white font-black text-sm uppercase">Medical Responder</p>
                                 </div>
                             </div>
+                            <div className="text-right">
+                                <p className="text-xl font-black text-emerald-500 leading-none mb-1">{routeDetails ? routeDetails.duration : 'Calculating...'}</p>
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">{routeDetails ? routeDetails.distance : '...'}</p>
+                            </div>
                         </div>
-                    )}
+                    </div>
+                )}
 
                 {/* Floating Map Indicators */}
                 <div className="absolute top-6 right-6 flex flex-col gap-3 z-20">

@@ -18,6 +18,8 @@ const mapOptions = {
     ]
 };
 
+const LIBRARIES = ['places', 'visualization'];
+
 export default function AppMap({
     center,
     markers = [],
@@ -33,7 +35,7 @@ export default function AppMap({
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
         googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-        libraries: ['places', 'visualization']
+        libraries: LIBRARIES
     })
 
     const [directionsResponse, setDirectionsResponse] = useState(null)
@@ -64,9 +66,32 @@ export default function AppMap({
         // Map unmounted
     }, [])
 
+    const [lastRoutePoints, setLastRoutePoints] = useState({ start: null, end: null });
+
     useEffect(() => {
+        // Only run if everything is loaded and we have both start and end coordinates
         if (isLoaded && routeStart && routeEnd) {
-            const directionsService = new window.google.maps.DirectionsService()
+            // Validate coordinates are real numbers before calling API
+            const isValid = (pos) => pos && typeof pos.lat === 'number' && typeof pos.lng === 'number';
+
+            if (!isValid(routeStart) || !isValid(routeEnd)) {
+                console.warn('Invalid coordinates for routing:', { routeStart, routeEnd });
+                if (onRouteUpdate) onRouteUpdate({ distance: 'Unavailable', duration: 'N/A' });
+                return;
+            }
+
+            // Simple jitter threshold check: Only update if distance has changed more than ~1 meter
+            const hasMovedSignificantly = (p1, p2) => {
+                if (!p1) return true;
+                return Math.abs(p1.lat - p2.lat) > 0.00001 || Math.abs(p1.lng - p2.lng) > 0.00001;
+            };
+
+            if (!hasMovedSignificantly(lastRoutePoints.start, routeStart) &&
+                !hasMovedSignificantly(lastRoutePoints.end, routeEnd)) {
+                return;
+            }
+
+            const directionsService = new window.google.maps.DirectionsService();
             directionsService.route(
                 {
                     origin: routeStart,
@@ -75,7 +100,8 @@ export default function AppMap({
                 },
                 (result, status) => {
                     if (status === window.google.maps.DirectionsStatus.OK) {
-                        setDirectionsResponse(result)
+                        setDirectionsResponse(result);
+                        setLastRoutePoints({ start: routeStart, end: routeEnd });
                         if (onRouteUpdate) {
                             const route = result.routes[0].legs[0];
                             onRouteUpdate({
@@ -84,19 +110,23 @@ export default function AppMap({
                             });
                         }
                     } else {
-                        console.error(`Error fetching directions ${result}`)
+                        console.error(`Directions Service Error: ${status}`);
+                        if (onRouteUpdate) onRouteUpdate({ distance: 'Error', duration: '--' });
                     }
                 }
-            )
+            );
         } else {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setDirectionsResponse(null)
-            if (onRouteUpdate) onRouteUpdate(null);
+            // If we don't have enough data yet, ensure the UI reflects that (but don't overwrite if it's just loading)
+            if (!routeStart || !routeEnd) {
+                setDirectionsResponse(null);
+                setLastRoutePoints({ start: null, end: null });
+                if (onRouteUpdate) onRouteUpdate(null);
+            }
         }
-    }, [isLoaded, routeStart, routeEnd, onRouteUpdate])
+    }, [isLoaded, routeStart, routeEnd, onRouteUpdate, lastRoutePoints])
 
-    if (!isLoaded) return <div className="h-full w-full bg-slate-200 animate-pulse flex items-center justify-center rounded-lg">Loading Map...</div>;
-    if (!center) return <div className="h-full w-full bg-slate-200 flex items-center justify-center rounded-lg text-slate-500">Waiting for location...</div>;
+    if (!isLoaded) return <div className="h-full w-full bg-slate-900/50 animate-pulse flex items-center justify-center rounded-lg">Loading Tactical Grid...</div>;
+    if (!center || isNaN(center.lat) || center.lat === null) return <div className="h-full w-full bg-slate-900/50 flex items-center justify-center rounded-lg text-slate-500 font-black uppercase tracking-widest text-xs">Waiting for location signal...</div>;
 
     return (
         <GoogleMap
@@ -108,15 +138,21 @@ export default function AppMap({
             options={mapOptions}
             onClick={() => setSelectedMarker(null)}
         >
-            {/* Current User Marker */}
-            <Marker position={center} icon={{ url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }} title="You are here" />
+            {/* Current User Marker (Optional) */}
+            {center && !markers.some(m => m.lat === center.lat && m.lng === center.lng) && (
+                <Marker position={center} icon={{ url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png" }} title="You are here" />
+            )}
 
             {/* Other Markers (Incidents, Hospitals, etc) */}
             {markers.map((m, i) => (
                 <Marker
                     key={i}
                     position={{ lat: m.lat, lng: m.lng }}
-                    icon={m.icon}
+                    icon={
+                        typeof m.icon === 'string'
+                            ? m.icon.replace('http:', 'https:')
+                            : (m.icon?.url ? { ...m.icon, url: m.icon.url.replace('http:', 'https:') } : undefined)
+                    }
                     title={m.title}
                     onClick={() => setSelectedMarker(m)}
                 />
@@ -135,7 +171,7 @@ export default function AppMap({
 
             {/* Driver Locations */}
             {driverLocations.map((d, i) => (
-                <Marker key={`driver-${i}`} position={{ lat: d.lat, lng: d.lng }} icon={{ url: "http://maps.google.com/mapfiles/kml/pal2/icon39.png" }} title="Ambulance" />
+                <Marker key={`driver-${i}`} position={{ lat: d.lat, lng: d.lng }} icon={{ url: "https://maps.google.com/mapfiles/kml/pal2/icon39.png" }} title="Ambulance" />
             ))}
 
             {/* Red Zones (Circles) */}

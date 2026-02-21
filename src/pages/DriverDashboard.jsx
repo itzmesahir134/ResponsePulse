@@ -50,7 +50,7 @@ export default function DriverDashboard() {
             return { ...zone, distance: dist };
         });
 
-        const nearbyZones = zonesWithDistance.filter(z => z.distance <= 5.0);
+        const nearbyZones = zonesWithDistance.filter(z => z.distance <= 20.0);
 
         if (nearbyZones.length === 0) return { type: 'none' };
 
@@ -64,7 +64,7 @@ export default function DriverDashboard() {
     const nearbyRedZonesCount = useMemo(() => {
         if (!location || !redZones.length) return 0;
         return redZones.filter(zone =>
-            calculateDistance(location.lat, location.lng, zone.center_lat, zone.center_lon) <= 5.0
+            calculateDistance(location.lat, location.lng, zone.center_lat, zone.center_lon) <= 20.0
         ).length;
     }, [location, redZones]);
 
@@ -111,7 +111,7 @@ export default function DriverDashboard() {
                     ...req,
                     distance: calculateDistance(location.lat, location.lng, req.latitude, req.longitude)
                 }))
-                .filter(req => req.distance <= 5.0) // 5km radius
+                .filter(req => req.distance <= 20.0) // 20km radius
                 .sort((a, b) => a.distance - b.distance)
 
             setNearbyRequests(filtered)
@@ -234,9 +234,9 @@ export default function DriverDashboard() {
     };
 
     const stats = [
-        { label: 'Trips Today', value: dashStats.trips.toString(), icon: '🚑', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-        { label: 'Avg Response Time', value: `${dashStats.avgResponse.toFixed(1)}m`, icon: '⏱️', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-        { label: 'Red Zones Nearby', value: nearbyRedZonesCount.toString(), icon: '⚠️', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+        { label: 'Trips Today', value: (dashStats.trips || 0).toString(), icon: '🚑', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+        { label: 'Avg Response Time', value: `${(dashStats.avgResponse || 0).toFixed(1)}m`, icon: '⏱️', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+        { label: 'Red Zones Nearby', value: (nearbyRedZonesCount || 0).toString(), icon: '⚠️', color: 'text-orange-500', bg: 'bg-orange-500/10' },
         { label: 'Driver Rating', value: '4.9', icon: '⭐', color: 'text-yellow-500', bg: 'bg-yellow-500/10' }
     ]
 
@@ -274,8 +274,8 @@ export default function DriverDashboard() {
                                 <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400">Assigned Dispatch</h3>
                             </div>
                             {assignedEmergency && (
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black border uppercase tracking-widest ${assignedEmergency.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                                    {assignedEmergency.status === 'accepted' ? 'En Route' : 'Assigned'}
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black border uppercase tracking-widest ${assignedEmergency.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : (assignedEmergency.status === 'assigned' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20')}`}>
+                                    {assignedEmergency.status === 'accepted' ? 'En Route' : (assignedEmergency.status === 'assigned' ? 'Assigned' : 'Pending')}
                                 </span>
                             )}
                         </div>
@@ -300,7 +300,7 @@ export default function DriverDashboard() {
                                     </div>
                                 </div>
 
-                                {assignedEmergency.status === 'pending' && (
+                                {(assignedEmergency.status === 'pending' || assignedEmergency.status === 'assigned') && (
                                     <button
                                         onClick={() => acceptRequest(assignedEmergency.id)}
                                         className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white text-[11px] font-black rounded-xl shadow-lg shadow-red-900/20 transition-all flex items-center justify-center gap-2 group/btn"
@@ -404,7 +404,7 @@ export default function DriverDashboard() {
                                             </div>
                                         </div>
                                         <span className="text-[11px] font-black text-slate-300 bg-slate-800 px-2 py-1 rounded-lg">
-                                            {req.distance?.toFixed(1)} km
+                                            {req.distance ? req.distance.toFixed(1) : '...'} km
                                         </span>
                                     </div>
 

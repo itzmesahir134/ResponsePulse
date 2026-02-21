@@ -142,16 +142,16 @@ export default function UserDashboard() {
 
             if (geminiResult.is_fallback) {
                 console.warn("AI Verification bypassed due to service constraints.");
-                // We show a subtle notice but don't block
-                setErrorMsg("AI Verification Unavailable: Dispatching for manual assessment.");
+                setErrorMsg("AI Verification Unavailable: A responder will verify manually.");
             }
 
             if (!geminiResult.crash_detected && !mustConfirm) {
-                setErrorMsg(`AI Verification: No crash detected in image. (${geminiResult.reason || 'Please verify context.'})`)
+                setErrorMsg(`AI Verification: Negative result. (${geminiResult.reason || 'Confirm if this is an error.'})`);
                 setMustConfirm(true);
                 return;
             }
 
+            // Map AI severity to numeric points (5=High, 3=Med, 1=Low)
             reportSeverity = geminiResult.severity === 'high' ? 5 : geminiResult.severity === 'medium' ? 3 : 1;
         }
 

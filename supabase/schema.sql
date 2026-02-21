@@ -42,6 +42,16 @@ BEGIN
     END IF;
 END $$;
 
+-- Safety check to ensure 'assigned' exists in the enum if it was created previously
+DO $$
+BEGIN
+    BEGIN
+        ALTER TYPE public.request_status ADD VALUE 'assigned' AFTER 'pending';
+    EXCEPTION
+        WHEN duplicate_object THEN null;
+    END;
+END $$;
+
 create table if not exists public.emergency_requests (
   id uuid default gen_random_uuid() primary key,
   requester_name text,
@@ -118,6 +128,11 @@ create table if not exists public.red_zones (
 );
 
 alter table public.red_zones enable row level security;
+
+drop policy if exists "Anyone can read red zones" on public.red_zones;
+drop policy if exists "Anyone can insert red zones" on public.red_zones;
+drop policy if exists "Anyone can delete red zones" on public.red_zones;
+
 create policy "Anyone can read red zones" on public.red_zones for select using (true);
 create policy "Anyone can insert red zones" on public.red_zones for insert with check (true);
 create policy "Anyone can delete red zones" on public.red_zones for delete using (true);
@@ -175,7 +190,7 @@ begin
     from public.profiles
     where role = 'driver' and is_available = true
       and latitude is not null and longitude is not null
-      and public.haversine_distance(NEW.latitude, NEW.longitude, latitude, longitude) <= 5.0
+      and public.haversine_distance(NEW.latitude, NEW.longitude, latitude, longitude) <= 20.0
     order by public.haversine_distance(NEW.latitude, NEW.longitude, latitude, longitude) asc
     limit 1;
 
